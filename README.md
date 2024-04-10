@@ -1,4 +1,4 @@
-# mini-project
+# mini-project : Aircraft Parts Management System
 
 ## 용어 정리
 1. fork - 다른 사람의 repository를 내가 어떤 부분을 수정하거나 추가 기능을 넣고 싶을 때 해당 repository를 내 github repository로 복제하는 기능
