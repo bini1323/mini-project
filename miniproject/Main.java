@@ -1,89 +1,110 @@
-package main;
+import dao.*;
+import session.UserSession;
+import ui.*;
+import vo.ApplyVO;
+import vo.EmployeeVO;
+import vo.StockVO;
 
-import java.sql.Connection;
 import java.util.ArrayList;
-
-import javax.swing.SwingUtilities;
-
-import main.dao.ApplyDAO;
-import main.dao.ApplyDAOImpl;
-import main.dao.EmployeeDAO;
-import main.dao.EmployeeDAOImpl;
-import main.dao.StockDAO;
-import main.dao.StockDAOImpl;
-import main.ui.LoginSwing;
-import main.ui.MainSwing;
-import main.ui.StockSwing;
-import main.util.OracleConnector;
-import main.vo.ApplyVO;
-import main.vo.EmployeeVO;
-import main.vo.StockVO;
 
 public class Main {
 	private EmployeeDAO employeeDAO;
 	private ApplyDAO applyDAO;
 	private StockDAO stockDAO;
-	
+
 	private Main() {
 		employeeDAO = new EmployeeDAOImpl();
 		applyDAO = new ApplyDAOImpl();
 		stockDAO = new StockDAOImpl();
 	}
-	
+
 	// APPLY
 	private int insertApply() {
-		ApplyVO applyVO = new ApplyVO(1, 10, 1, 1);
+		// appyId ìë™ ì¦ê°€
+		ApplyVO lastData = applyDAO.selectLast();
+		long applyId = lastData.getApplyId() + 1;
+		// ë¶€í’ˆì´ë¦„ì— í•´ë‹¹í•˜ëŠ” id ì¡°íšŒ
+		StockVO stockVO = stockDAO.selectByPartName("ë¶€í’ˆ1");
+		String stockId = stockVO.getPid();
+		if (checkNullString(stockId)) {
+			System.out.println("í•´ë‹¹ ë¶€í’ˆì´ ì¡´ì¬í•˜ì§€ ì•ŠìŠµë‹ˆë‹¤");
+			return -1;
+		}
+		ApplyVO applyVO = new ApplyVO(applyId, 10, Long.parseLong(stockId), 1);
 		int count = applyDAO.insert(applyVO);
 		return count;
 	}
-	
-	private ArrayList<ApplyVO> selectApply() {
-		return applyDAO.select();
-	}
-	
-	private int acceptApply(ApplyVO applyVO) { // ±ÇÇÑ ¿©ºÎ¿¡ µû¶ó ½ÇÇà, ¾È ½ÇÇà, ±×¸®°í Àç°í ¼ö·® °¹¼ö ¾÷µ¥ÀÌÆ®
-		EmployeeVO employeeVO = employeeDAO.selectOne(applyVO.getEmployeeId());
-		StockVO stockVO = stockDAO.selectOne(applyVO.getStockId());
-		if (verifyJob(employeeVO.getJob())) {
-			return -1;
-		}
-		int count = applyDAO.acceptApply(applyVO, employeeVO);
-		count += stockDAO.updateStockNum(stockVO, applyVO);
-		return count;
-	}
-	
-	private int refuseApply(ApplyVO applyVO) {
-		EmployeeVO employeeVO = employeeDAO.selectOne(applyVO.getEmployeeId());
-		if (verifyJob(employeeVO.getJob())) {
-			return -1;
-		}
-		int count = applyDAO.refuseApply(applyVO, employeeVO);
-		return count;
-	}
-	
-	private boolean verifyJob(String job) {
-		if (job.equals("´ë¸®")) {
+
+	private boolean checkNullString(String s) {
+		if (s != null) {
 			return false;
 		}
 		return true;
 	}
-	
-	// STOCK
-	private int insertStock() {
-		// VO »ı¼º ÇÏ°í VO µ¥ÀÌÅÍ ÀÔ·Â 
-		StockVO lastData = stockDAO.selectLast();
-		long pid = Long.parseLong(lastData.getPid()) + 1;
-    	StockVO newProduct = new StockVO(String.valueOf(pid), "ºÎÇ°1", 10, "2024-04-01", "USA", "2024-03-25", null);
-    	// DAO È£ÃâÇØ¼­ 
-        // VO¸¦ º¸³»¼­ addProduct ÇÔ¼ö·Î ÀÎ¼­Æ® ÇÒ ·Á°í ÇÑ´Ù.
-        int count = stockDAO.insertStock(newProduct);
+
+	private ArrayList<ApplyVO> selectApply() {
+		return applyDAO.findByApplyConditionOrderByApplyDateASC("W");
+	}
+
+	private int acceptApply(long applyId) { // ê¶Œí•œ ì—¬ë¶€ì— ë”°ë¼ ì‹¤í–‰, ì•ˆ ì‹¤í–‰, ê·¸ë¦¬ê³  ì¬ê³  ìˆ˜ëŸ‰ ê°¯ìˆ˜ ì—…ë°ì´íŠ¸
+		ApplyVO applyVO = applyDAO.selectById(applyId);
+		EmployeeVO employeeVO = employeeDAO.selectById(1);
+		StockVO stockVO = stockDAO.selectById(applyVO.getStockId());
+		if (verifyJob(employeeVO.getJob())) {
+			System.out.println("ëŒ€ë¦¬ ì§ê¸‰ì´ ì•„ë‹™ë‹ˆë‹¤");
+			return -1;
+		}
+		if (verifyStockCount(stockVO.getStockNum(), applyVO.getCnt())) {
+			System.out.println("ë¶€í’ˆ ì¬ê³ ê°€ ë¶€ì¡±í•©ë‹ˆë‹¤");
+			return -1;
+		}
+		int count = 0;
+		count += applyDAO.acceptApply(applyVO);
+		count += stockDAO.updateStockNum(stockVO, applyVO);
 		return count;
 	}
-	
+
+	private int refuseApply(long applyId) {
+		ApplyVO applyVO = applyDAO.selectById(applyId);
+		EmployeeVO employeeVO = employeeDAO.selectById(1);
+		if (verifyJob(employeeVO.getJob())) {
+			System.out.println("ëŒ€ë¦¬ ì§ê¸‰ì´ ì•„ë‹™ë‹ˆë‹¤");
+			return -1;
+		}
+		int count = applyDAO.refuseApply(applyVO);
+		return count;
+	}
+
+	private boolean verifyJob(String job) {
+		if (!job.equals("ëŒ€ë¦¬")) {
+			return true;
+		}
+		return false;
+	}
+
+	private boolean verifyStockCount(int stockCount, int applyCount) {
+		if (stockCount < applyCount) {
+			return true;
+		}
+		return false;
+	}
+
+	// STOCK
+	private int insertStock() {
+		// VO ìƒì„± í•˜ê³  VO ë°ì´í„° ì…ë ¥
+		StockVO lastData = stockDAO.selectLast();
+		long pid = Long.parseLong(lastData.getPid()) + 1;
+		StockVO newProduct = new StockVO(String.valueOf(pid), "ë¶€í’ˆ1", 10, "2024-04-01", "USA", "2024-03-25", null);
+		// DAO í˜¸ì¶œí•´ì„œ
+		// VOë¥¼ ë³´ë‚´ì„œ addProduct í•¨ìˆ˜ë¡œ ì¸ì„œíŠ¸ í•  ë ¤ê³  í•œë‹¤.
+		int count = stockDAO.insertStock(newProduct);
+		return count;
+	}
+
 	private ArrayList<StockVO> selectStock() {
 		return stockDAO.getAllProducts();
 	}
-	
+
 	//EMPLOYEE
 	private int registerEmployee() {
 		if (employeeDAO.isExistsByEmail("a@s.d")) {
@@ -91,51 +112,48 @@ public class Main {
 		}
 		EmployeeVO lastData = employeeDAO.selectLast();
 		long employeeId = Long.parseLong(lastData.getEmployeeId()) + 1;
-		EmployeeVO evo = new EmployeeVO(String.valueOf(employeeId), "ÀåÅÂÇö", "°³¹ß", null, "2002-06-25", 
-				"ÀÎÃµ ºÎÆò±¸", "a@s.d", "asd", "01012345678", null, null);
+		EmployeeVO evo = new EmployeeVO(String.valueOf(employeeId), "ì¥íƒœí˜„", "ê°œë°œ", null, "2002-06-25",
+				"ì¸ì²œ ë¶€í‰êµ¬", "a@s.d", "asd", "01012345678", null, null);
 		int nCnt = employeeDAO.insert(evo);
 		return nCnt;
 	}
 
-	private String loginCheck() {
-		EmployeeVO evo = new EmployeeVO("qwer@gmail.com", "qwre1234");
-		ArrayList<EmployeeVO> aList = employeeDAO.loginCheck(evo);
-		String loginMsg = "";
-	
-		if (aList !=null && aList.size() == 1) {
-			
-			loginMsg = "SUCCESS";						
-	
-		}else if(aList.size() > 1){
-		
-			loginMsg = "FAIL_1";
-		}else {
-		
-			loginMsg = "FAIL_2";
+	private void loginCheck() {
+		EmployeeVO evo = new EmployeeVO("a@s.d", "asd");
+		EmployeeVO result = employeeDAO.loginCheck(evo);
+
+		if (result != null) {
+			System.out.println("SUCCESS");
+			UserSession.setLoginUser(result);
+		} else {
+			System.out.println("FAIL");
 		}
-		return loginMsg;
-	}	
-	
+	}
+
 
 	public static void main(String[] args) {
 		Main main = new Main();
 		// APPLY
 		//System.out.println(main.insertApply());
-		//main.selectApply();
-		//System.out.println(main.acceptApply(new ApplyVO(1, 10, 1, 1)));
-		//System.out.println(main.refuseApply(new ApplyVO(1, 10, 1, 1)));
-	
+		/*for (ApplyVO vo : main.selectApply()) {
+			System.out.println(vo.getApplyId() + ", " + vo.getCnt() + ", " + vo.getStockId() + ", " + vo.getEmployeeId()
+					+ ", " + vo.getApplyCondition() + ", " + vo.getCreatedDate());
+		}*/
+		//System.out.println(main.acceptApply(1));
+		//System.out.println(main.refuseApply(1));
+
 		// STOCK
-        //System.out.println(main.insertStock());
-        //main.selectStock();
-        
-        // EMPLOYEE
-        //System.out.println(main.registerEmployee());
-		//System.out.println(main.loginCheck());
-		
+		//System.out.println(main.insertStock());
+		//main.selectStock();
+
+		// EMPLOYEE
+		//System.out.println(main.registerEmployee());
+		//main.loginCheck();
+
 		// SWING
 		new LoginSwing();
-		
+		//new ApplyHistorySwing();
+		//new ApplySwing();
 	}
 
 }
